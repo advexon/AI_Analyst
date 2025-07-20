@@ -1,0 +1,85 @@
+version: "3.8"
+
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:7.0
+    container_name: analytica-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: analytica-ai
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - analytica-network
+
+  # Redis for job queue
+  redis:
+    image: redis:7.2-alpine
+    container_name: analytica-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - analytica-network
+
+  # Backend API (NestJS)
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    container_name: analytica-backend
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      MONGODB_URI: mongodb://host.docker.internal:27017/analytica-ai
+      JWT_SECRET: your-super-secret-jwt-key-for-development
+      JWT_EXPIRES_IN: 7d
+      FRONTEND_URL: http://localhost:5173
+      REDIS_URL: redis://redis:6379
+      OLLAMA_URL: http://host.docker.internal:11434
+      DOCKER_ENV: true
+      LOCAL_AI_ENABLED: true
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    depends_on:
+      - redis
+    networks:
+      - analytica-network
+
+  # Frontend (React with Vite)
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: analytica-frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - analytica-network
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  analytica-network:
+    driver: bridge
